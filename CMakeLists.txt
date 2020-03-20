@@ -3,7 +3,7 @@ project(Lossy2dCompression)
 set(root_dir ${PROJECT_SOURCE_DIR})
 
 add_subdirectory(src)
-# add_subdirectory(checker)
+add_subdirectory(checker)
 # enable_testing()
 # add_test(NAME example_test COMMAND test/example_test/run)
 
