@@ -329,7 +329,13 @@ struct Solver {
   }
 
   void solve() {
-    State s(10, 10);
+    int h = 0;
+    int w = 0;
+    for (auto & grid : grids) {
+      h = max(h, (int)grid.size());
+      w = max(w, (int)grid[0].size());
+    }
+    State s(h, w);
     for (int i = 0; i < N; ++i) {
       int s1 = s.calcScore();
       int diff = s.update(i);
