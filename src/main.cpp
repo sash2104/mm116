@@ -185,8 +185,8 @@ struct MedianSet {
   int get() { return m; }
 };
 
-const int MAX_H = 20;
-const int MAX_W = 20;
+const int MAX_H = 500;
+const int MAX_W = 500;
 int N;
 vector<vector<vector<int>>> grids;
 using grid_t = vector<vector<int>>;
@@ -260,6 +260,7 @@ struct SASolver {
   double endTemp = 1;
   Timer timer = Timer(5.0);
   State best;
+  grid_t ogrid;
   vector<Pos> best_lp;
   SASolver() { init(); }
   SASolver(double st, double et): startTemp(st), endTemp(et) { init(); }
@@ -293,6 +294,12 @@ struct SASolver {
           if (bestScore < score) {
             bestScore = score;
             best = state;
+            ogrid = grid_t(best.h, vector<int>(best.w));
+            for (int y = 0; y < best.h; ++y) {
+              for (int x = 0; x < best.w; ++x) {
+                ogrid[y][x] = memo[y][x].get();
+              }
+            }
             logger::json("tag", "!", "time", t, "counter", counter, "score", score);
           }
         }
@@ -304,15 +311,28 @@ struct SASolver {
   }
 };
 
+struct Answer { 
+  int h, w;
+  grid_t ogrid;
+  vector<Pos> lp;
+  double comp;
+  double loss;
+  double score;
+};
+
 struct Solver {
   Timer timer = Timer(5);
-  vector<vector<int>> ogrid;
+  grid_t ogrid;
+  vector<Answer> answers;
   vector<Pos> lp;
   State out;
+  int T;
+  double P;
   void read() {
-    double P; cin >> P;
+    cin >> P;
     cin >> N;
     lp.resize(N);
+    T = 0;
     for (int i = 0; i < N; i++) {
       int H; cin >> H;
       vector<vector<int>> grid(H);
@@ -324,17 +344,123 @@ struct Solver {
         }
         grid[y] = row;
       }
+      int W = grid[0].size();
+      T += H*W;
       grids.push_back(grid);
     }
   }
 
+  void solve_greedy() {
+    vector<int> gids;
+    for (int i = 0; i < N; ++i) {
+      gids.push_back(i);
+    }
+    sort(gids.begin(), gids.end(), [&](int l, int r) {
+      int lh = grids[l].size();
+      int lw = grids[l][0].size();
+      int rh = grids[r].size();
+      int rw = grids[r][0].size();
+      if (lh == rh) return lw > rw;
+      return lh > rh;
+    });
+    int mh = 0, mw = 0;
+    vector<Pos> put; // おいた場所
+    vector<Pos> cand;
+    int ma = 500;
+    vector<vector<bool>> placed(ma, vector<bool>(ma));
+    cand.push_back({0, 0});
+    for (int id : gids) {
+      int h = grids[id].size();
+      int w = grids[id][0].size();
+      int best = ma*ma;
+      Pos bp;
+      for (Pos p : cand) {
+        if (p.y+h >= ma || p.x+w >= ma) continue;
+        int cnt = 0;
+        for (int y = p.y; y < p.y+h; ++y) {
+          for (int x = p.x; x < p.x+w; ++x) {
+            if (placed[y][x]) ++cnt;
+          }
+        }
+        if (cnt*10 > h*w) continue;
+        int h2 = max(mh, (p.y+h));
+        int w2 = max(mw, (p.x+w));
+        int score = h2*w2+abs(h2-w2);
+        if (score < best) {
+          bp = p;
+          best = score;
+        }
+      }
+      put.push_back(bp);
+      mh = max(mh, bp.y+h);
+      mw = max(mw, bp.x+w);
+      for (int y = bp.y; y < bp.y+h; ++y) {
+        for (int x = bp.x; x < bp.x+w; ++x) {
+          placed[y][x] = true;
+        }
+      }
+      cand.push_back({bp.x+w, bp.y});
+      cand.push_back({bp.x, bp.y+h});
+      vector<Pos> ncand;
+      for (Pos p : cand) {
+        if (placed[p.y][p.x]) continue;
+        ncand.push_back(p);
+      }
+      cand = ncand;
+      // cerr << id << " " << mh << " " << mw << endl;
+    }
+    Answer ans;
+    ans.h = mh;
+    ans.w = mw;
+    ans.lp = vector<Pos>(N);
+    ans.ogrid = grid_t(mh, vector<int>(mw));
+    for (int i = 0; i < N; ++i) {
+      int id = gids[i];
+      Pos p = put[i];
+      ans.lp[id] = p;
+      grid_t &g = grids[id];
+      for (int y = 0; y < g.size(); ++y) {
+        for (int x = 0; x < g[0].size(); ++x) {
+          ans.ogrid[y+p.y][x+p.x] = g[y][x];
+        }
+      }
+    }
+    ans.loss = 0;
+    ans.comp = ans.h*ans.w / (double)T;
+    ans.score = ans.comp*P+ans.loss*(1-P);
+    answers.push_back(ans);
+    logger::json("type","greedy_loss","c",ans.comp,"l",ans.loss,"score",ans.score);
+    // cerr << ans.comp << " " << ans.loss << " " << ans.score << endl;
+    // for (int y = 0; y < mh; ++y) {
+    //   for (int x = 0; x < mw; ++x) {
+    //     if (placed[y][x]) cerr << 1;
+    //     else cerr << ".";
+    //   }
+    //   cerr << endl;
+    // }
+    // for (int y = 0; y < 20; ++y) {
+    //   for (int x = 0; x < 220; ++x) {
+    //     if (placed[y][x]) cerr << 1;
+    //     else cerr << ".";
+    //   }
+    //   cerr << endl;
+    // }
+  }
+
   void solve() {
+    solve_greedy();
     int h = 0;
     int w = 0;
+    int sum = 0;
     for (auto & grid : grids) {
-      h = max(h, (int)grid.size());
-      w = max(w, (int)grid[0].size());
+      int h0 = grid.size();
+      int w0 = grid[0].size();
+      h = max(h, h0);
+      w = max(w, w0);
+      sum += h0*w0;
     }
+    // State s(h, w);
+    int s0 = sqrt(sum*1.1);
     State s(h, w);
     for (int i = 0; i < N; ++i) {
       int s1 = s.calcScore();
@@ -342,32 +468,40 @@ struct Solver {
       int s2 = s.calcScore();
       // cerr << s1 << " " << diff << " " << s2 << endl;
     }
-    // for (int i = 0; i < 10; ++i) {
-    //   int s1 = s.calcScore();
-    //   int diff = s.update();
-    //   int s2 = s.calcScore();
-    //   s.revert();
-    //   int s3 = s.calcScore();
-    //   // cerr << s1 << " " << diff << " " << s2 << " " << s3 << endl;
-    // }
     SASolver sa;
     sa.solve(s);
-    out = sa.best;
+    Answer ans;
+    ans.h = sa.best.h;
+    ans.w = sa.best.w;
+    ans.lp = sa.best.lp;
+    ans.ogrid = sa.ogrid;
+    ans.loss = sa.best.loss/(12.5*T);
+    ans.comp = ans.h*ans.w / (double)T;
+    ans.score = ans.comp*P+ans.loss*(1-P);
+    logger::json("type","sa","c",ans.comp,"l",ans.loss,"score",ans.score);
+    answers.push_back(ans);
   }
 
   void write() {
-    int H = out.h;
-    cout << H << endl;
+    int bid = 0;
+    double best = answers[0].score;
+    for (int i = 1; i < answers.size(); ++i) {
+      if (answers[i].score < best) {
+        bid = i;
+        best = answers[i].score;
+      }
+    }
+    Answer &ans = answers[bid];
+    cout << ans.h << endl;
     int W = out.w;
-    for (int y = 0; y < H; ++y) {
-      for (int x = 0; x < W; ++x) {
-        int d = memo[y][x].get();
-        cout << (char)('A'+d);
+    for (int y = 0; y < ans.h; ++y) {
+      for (int x = 0; x < ans.w; ++x) {
+        cout << (char)('A'+ans.ogrid[y][x]);
       }
       cout << endl;
     }
-    for (auto p : out.lp) {
-      cout << p.x << " " << p.y << endl;
+    for (auto p : ans.lp) {
+      cout << p.y << " " << p.x << endl;
     }
     cout.flush();
   }
