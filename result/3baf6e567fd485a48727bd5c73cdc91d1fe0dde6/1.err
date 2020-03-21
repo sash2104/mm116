@@ -1,0 +1,17 @@
+{"tag":"param","type":"sa","start_temp":"30","end_temp":"1","limit":"5"}
+{"tag":"!","time":"4.98082e-05","counter":"1","score":"-522"}
+{"tag":"!","time":"4.98082e-05","counter":"4","score":"-510"}
+{"tag":"!","time":"4.98082e-05","counter":"7","score":"-498"}
+{"tag":"!","time":"4.98082e-05","counter":"16","score":"-462"}
+{"tag":"!","time":"4.98082e-05","counter":"96","score":"-432"}
+{"tag":"!","time":"4.98082e-05","counter":"168","score":"-422"}
+{"tag":"!","time":"4.98082e-05","counter":"208","score":"-421"}
+{"tag":"!","time":"4.98082e-05","counter":"289","score":"-401"}
+{"tag":"!","time":"4.98082e-05","counter":"359","score":"-379"}
+{"tag":"!","time":"0.00965312","counter":"2220","score":"-378"}
+{"tag":"!","time":"0.00965312","counter":"2344","score":"-367"}
+{"tag":"!","time":"0.02128","counter":"5344","score":"-362"}
+{"tag":"!","time":"0.0254549","counter":"6786","score":"-355"}
+{"tag":"!","time":"0.056107","counter":"14759","score":"-350"}
+{"tag":"!","time":"0.18987","counter":"48116","score":"-343"}
+{"tag":"result","counter":"1223000","score":"-343"}
