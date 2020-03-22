@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 using namespace std;
 
@@ -85,24 +86,28 @@ void json(const Args&... args) {
 }  // namespace logger
 
 struct MedianSet2 {
-  vector<int> data;
+  int data[26];
   int m; // 中央値
   int n; // 要素数
   int loss; // (中央値と各要素との差分の絶対値)の和
-  MedianSet2() : m(0), n(0), loss(0), data(26, 0) {}
+  MedianSet2() : m(0), n(0), loss(0) {
+    for (int i = 0; i < 26; ++i) data[i] = 0;
+  }
 
   int add(int x)  {
     ++n; ++data[x];
     int nm = (n+1)/2;
     int c = 0;
     for (int i = 0; i < 26; ++i) {
-      if (data[i] == 0) continue;
       c += data[i];
       if (c >= nm) { m = i; break; }
     }
     int nloss = 0;
-    for (int i = 0; i < 26; ++i) {
-      nloss += data[i]*abs(i-m);
+    for (int i = 0; i < m; ++i) {
+      nloss += data[i]*(m-i);
+    }
+    for (int i = m+1; i < 26; ++i) {
+      nloss += data[i]*(i-m);
     }
     int dloss = nloss-loss;
     loss = nloss;
@@ -115,13 +120,15 @@ struct MedianSet2 {
     int nm = (n+1)/2;
     int c = 0;
     for (int i = 0; i < 26; ++i) {
-      if (data[i] == 0) continue;
       c += data[i];
       if (c >= nm) { m = i; break; }
     }
     int nloss = 0;
-    for (int i = 0; i < 26; ++i) {
-      nloss += data[i]*abs(i-m);
+    for (int i = 0; i < m; ++i) {
+      nloss += data[i]*(m-i);
+    }
+    for (int i = m+1; i < 26; ++i) {
+      nloss += data[i]*(i-m);
     }
     int dloss = nloss-loss;
     loss = nloss;
@@ -129,69 +136,23 @@ struct MedianSet2 {
   }
 
   int get() { return m; }
+
+  // void show() {
+  //   cerr << m << " " << n << " " << loss << endl;
+  //   for (int i = 0; i < 26; ++i) {
+  //     if (data[i] == 0) continue;
+  //     cerr << i << " " << data[i] << endl;
+  //   }
+  // }
 };
 
-// 集合の中央値の取得, 集合への要素の追加, 削除がO(logQ)程度で行えるデータ構造
-// @see https://wiki.kimiyuki.net/%E4%B8%AD%E5%A4%AE%E5%80%A4
-struct MedianSet {
-  int l; // 中央値より小さい要素の個数
-  int r; // 中央値より大きい要素の個数
-  int m; // 中央値
-  int n; // 要素数
-  int loss; // (中央値と各要素との差分の絶対値)の和
-  MedianSet() : l(0), r(0), m(0), n(0), loss(0) {}
-  std::map<int, int> data; 
 
-  void update() { // l, r, mの値を適切なものに更新する
-    if (n == 0) { l = r = m = loss = 0; return; }
-    if (l >= data[m]+r) {
-      int nm = std::prev(data.find(m))->first;
-      r += data[m];
-      l -= data[nm];
-      m = nm;
-    }
-    else if (r > data[m]+l) {
-      int nm = std::next(data.find(m))->first;
-      l += data[m];
-      r -= data[nm];
-      m = nm;
-    }
-  }
-
-  int add(int x)  {
-    int bm = m, bl = l, br = r;
-    ++data[x]; ++n;
-    if (x < m) ++l;
-    else if (x > m) ++r;
-    update();
-    if (n == 1) return 0;
-    int dloss = (br-bl)*(bm-m)+abs(m-bm)+abs(x-m);
-    loss += dloss;
-    return dloss;
-  }
-
-  int remove(int x) {
-    int bm = m, bl = l, br = r;
-    --data[x]; --n;
-    if (data[x] == 0) data.erase(x);
-    if (x < m) --l;
-    else if (x > m) --r;
-    update();
-    int dloss = (br-bl)*(m-bm)+abs(x-bm);
-    loss -= dloss;
-    return dloss;
-  }
-
-  int get() { return m; }
-};
-
-const int MAX_H = 500;
-const int MAX_W = 500;
+const int MAX_H = 200;
+const int MAX_W = 200;
 int N;
 vector<vector<vector<int>>> grids;
 using grid_t = vector<vector<int>>;
 MedianSet2 memo[MAX_H][MAX_W]; // memo[y][x][c] : (x,y)にあるアルファベットの集合
-// MedianSet memo[MAX_H][MAX_W]; // memo[y][x][c] : (x,y)にあるアルファベットの集合
 struct Pos { int x, y; };
 
 struct State {
@@ -208,6 +169,7 @@ struct State {
     grid_t& grid = grids[id];
     int gh = grid.size();
     int gw = grid[0].size();
+    if (gh == h && gw == w) return -1001001;
     Pos p = {rnd.nextInt(w-gw+1), rnd.nextInt(h-gh+1)};
     // cerr << "[0]" << id << " " << p.x << " " << p.y << endl;
     int diff = update(id, p);
@@ -230,12 +192,13 @@ struct State {
     int gw = grid[0].size();
     int bx = lp[id].x;
     int by = lp[id].y;
-    for (int dy = 0; dy < gh; ++dy) {
-      int y = dy+by;
-      for (int dx = 0; dx < gw; ++dx) {
-        int x = dx+bx;
-        if (bx >= 0 && by >= 0) {
-          loss -= memo[y][x].remove(grid[dy][dx]);
+    if (bx >= 0) {
+      for (int dy = 0; dy < gh; ++dy) {
+        int y = dy+by;
+        for (int dx = 0; dx < gw; ++dx) {
+          int x = dx+bx;
+          int dl = memo[y][x].remove(grid[dy][dx]);
+          loss -= dl;
         }
       }
     }
@@ -243,7 +206,8 @@ struct State {
       int y = dy+p.y;
       for (int dx = 0; dx < gw; ++dx) {
         int x = dx+p.x;
-        loss += memo[y][x].add(grid[dy][dx]);
+        int dl = memo[y][x].add(grid[dy][dx]);
+        loss += dl;
       }
     }
     lp[id] = p;
@@ -281,8 +245,8 @@ struct SASolver {
     {
       for (int i = 0; i < 1000; ++i) { // 時間計算を間引く
         int diff = state.update();
-        if (diff == -1000000) { // 絶対に更新しない場合
-          state.revert();
+        if (diff == -1001001) { // 絶対に更新しない場合
+          // state.revert();
           continue;
         }
 
@@ -323,7 +287,7 @@ struct Answer {
 };
 
 struct Solver {
-  Timer timer = Timer(4.8);
+  Timer timer = Timer(9.8);
   grid_t ogrid;
   vector<Answer> answers;
   vector<Pos> lp;
@@ -499,19 +463,29 @@ struct Solver {
       w = max(w, w0);
       sum += h0*w0;
     }
+    double s_comp = (h*w/T)*P+0.45*(1-P);
+    double s_loss = P+0.02*(1-P);
+    logger::json("s_comp",s_comp,"s_loss",s_loss,"T",T,"P",P);
     double best = 100;
     int bh = h, bw = w;
-    // for (int oh =0; oh < 3; ++oh) {
-    //   for (int ow =0; ow < 3; ++ow) {
-    //     double sc = solve_sa(h+oh, w+ow);
-    //     if (sc < best) {
-    //       best = sc;
-    //       bh = h+oh;
-    //       bw = w+ow;
-    //     }
-    //   }
-    // }
-    solve_sa(bh, bw, timer.LIMIT-timer.get());
+    if (s_comp < s_loss) {
+      int bh = h, bw = w;
+      // for (int oh =0; oh < 5; ++oh) {
+      //   for (int ow =0; ow < 5; ++ow) {
+      //     double sc = solve_sa(h+oh, w+ow, 3);
+      //     if (sc < best) {
+      //       best = sc;
+      //       bh = h+oh;
+      //       bw = w+ow;
+      //     }
+      //   }
+      // }
+      solve_sa(bh, bw, timer.LIMIT-timer.get());
+    }
+    else {
+      int sz = sqrt(sum*1.02);
+      solve_sa(max(sz,h), max(sz,w), timer.LIMIT-timer.get());
+    }
   }
 
   void write() {
