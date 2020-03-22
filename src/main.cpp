@@ -210,14 +210,16 @@ struct State {
     int gw = grid[0].size();
     Pos p = {rnd.nextInt(w-gw+1), rnd.nextInt(h-gh+1)};
     // cerr << "[0]" << id << " " << p.x << " " << p.y << endl;
-    return update(id, p);
+    int diff = update(id, p);
+    return diff;
   }
   int update(int id) {
     grid_t& grid = grids[id];
     int gh = grid.size();
     int gw = grid[0].size();
     Pos p = {rnd.nextInt(w-gw+1), rnd.nextInt(h-gh+1)};
-    return update(id, p);
+    int diff = update(id, p);
+    return diff;
   }
   int update(int id, const Pos& p) { // idのgridをpに移動する
     bp = lp[id];
@@ -257,8 +259,8 @@ struct State {
 
 struct SASolver {
   double startTemp = 30;
-  double endTemp = 1;
-  Timer timer = Timer(5.0);
+  double endTemp = 0.01;
+  Timer timer = Timer(0.3);
   State best;
   grid_t ogrid;
   vector<Pos> best_lp;
@@ -321,7 +323,7 @@ struct Answer {
 };
 
 struct Solver {
-  Timer timer = Timer(5);
+  Timer timer = Timer(4.8);
   grid_t ogrid;
   vector<Answer> answers;
   vector<Pos> lp;
@@ -350,20 +352,34 @@ struct Solver {
     }
   }
 
-  void solve_greedy() {
+  void solve_greedy(int ms=0, bool vertical=false) {
     vector<int> gids;
     for (int i = 0; i < N; ++i) {
       gids.push_back(i);
     }
-    sort(gids.begin(), gids.end(), [&](int l, int r) {
-      int lh = grids[l].size();
-      int lw = grids[l][0].size();
-      int rh = grids[r].size();
-      int rw = grids[r][0].size();
-      if (lh == rh) return lw > rw;
-      return lh > rh;
-    });
-    int mh = 0, mw = 0;
+    int mh, mw = 0;
+    if (vertical) {
+      mw = ms;
+      sort(gids.begin(), gids.end(), [&](int l, int r) {
+        int lh = grids[l].size();
+        int lw = grids[l][0].size();
+        int rh = grids[r].size();
+        int rw = grids[r][0].size();
+        if (lw == rw) return lh > rh;
+        return lw > rw;
+      });
+    }
+    else {
+      mh = ms;
+      sort(gids.begin(), gids.end(), [&](int l, int r) {
+        int lh = grids[l].size();
+        int lw = grids[l][0].size();
+        int rh = grids[r].size();
+        int rw = grids[r][0].size();
+        if (lh == rh) return lw > rw;
+        return lh > rh;
+      });
+    }
     vector<Pos> put; // おいた場所
     vector<Pos> cand;
     int ma = 500;
@@ -428,8 +444,9 @@ struct Solver {
     ans.loss = 0;
     ans.comp = ans.h*ans.w / (double)T;
     ans.score = ans.comp*P+ans.loss*(1-P);
+    if (answers.size() > 0 && answers[0].score <= ans.score) return;
     answers.push_back(ans);
-    logger::json("type","greedy_loss","c",ans.comp,"l",ans.loss,"score",ans.score);
+    logger::json("type","greedy_loss","c",ans.comp,"l",ans.loss,"score",ans.score, "h",ans.h,"w",ans.w);
     // cerr << ans.comp << " " << ans.loss << " " << ans.score << endl;
     // for (int y = 0; y < mh; ++y) {
     //   for (int x = 0; x < mw; ++x) {
@@ -447,28 +464,13 @@ struct Solver {
     // }
   }
 
-  void solve() {
-    solve_greedy();
-    int h = 0;
-    int w = 0;
-    int sum = 0;
-    for (auto & grid : grids) {
-      int h0 = grid.size();
-      int w0 = grid[0].size();
-      h = max(h, h0);
-      w = max(w, w0);
-      sum += h0*w0;
-    }
-    // State s(h, w);
-    int s0 = sqrt(sum*1.1);
+  double solve_sa(int h, int w, double limit = 0.3) {
     State s(h, w);
     for (int i = 0; i < N; ++i) {
-      int s1 = s.calcScore();
       int diff = s.update(i);
-      int s2 = s.calcScore();
       // cerr << s1 << " " << diff << " " << s2 << endl;
     }
-    SASolver sa;
+    SASolver sa(30, 1, limit);
     sa.solve(s);
     Answer ans;
     ans.h = sa.best.h;
@@ -480,6 +482,36 @@ struct Solver {
     ans.score = ans.comp*P+ans.loss*(1-P);
     logger::json("type","sa","c",ans.comp,"l",ans.loss,"score",ans.score);
     answers.push_back(ans);
+    return ans.score;
+  }
+  void solve() {
+    for (int s = 0; s <= 50; ++s) {
+      solve_greedy(s);
+      solve_greedy(s,true);
+    }
+    int h = 0;
+    int w = 0;
+    int sum = 0;
+    for (auto & grid : grids) {
+      int h0 = grid.size();
+      int w0 = grid[0].size();
+      h = max(h, h0);
+      w = max(w, w0);
+      sum += h0*w0;
+    }
+    double best = 100;
+    int bh = h, bw = w;
+    // for (int oh =0; oh < 3; ++oh) {
+    //   for (int ow =0; ow < 3; ++ow) {
+    //     double sc = solve_sa(h+oh, w+ow);
+    //     if (sc < best) {
+    //       best = sc;
+    //       bh = h+oh;
+    //       bw = w+ow;
+    //     }
+    //   }
+    // }
+    solve_sa(bh, bw, timer.LIMIT-timer.get());
   }
 
   void write() {
