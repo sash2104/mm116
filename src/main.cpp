@@ -149,6 +149,7 @@ struct MedianSet2 {
 
 const int MAX_H = 200;
 const int MAX_W = 200;
+const int INVALID = -1001001;
 int N;
 vector<vector<vector<int>>> grids;
 using grid_t = vector<vector<int>>;
@@ -161,25 +162,38 @@ struct State {
   int bloss;
   int h, w;
   int loss;
+  int update_type; 
   vector<Pos> lp;
-  State() : bloss(0), loss(0), h(10), w(10), lp(N, {-1, -1}) {}
-  State(int h, int w) : bloss(0), loss(0), h(h), w(w), lp(N, {-1, -1}) {}
+  State() : bloss(0), loss(0), h(10), w(10), lp(N, {-1, -1}), update_type(0) {}
+  State(int h, int w) : bloss(0), loss(0), h(h), w(w), lp(N, {-1, -1}), update_type(0) {}
+  State(int h, int w, int u) : bloss(0), loss(0), h(h), w(w), lp(N, {-1, -1}), update_type(u) {}
   int update() {
     int id = rnd.nextInt(N);
-    grid_t& grid = grids[id];
-    int gh = grid.size();
-    int gw = grid[0].size();
-    if (gh == h && gw == w) return -1001001;
-    Pos p = {rnd.nextInt(w-gw+1), rnd.nextInt(h-gh+1)};
-    // cerr << "[0]" << id << " " << p.x << " " << p.y << endl;
-    int diff = update(id, p);
-    return diff;
+    // if (update_type > 0) { 
+    //   int type = rnd.nextInt(10);
+    //   if (type < 2) return update(id);
+    // }
+    return update(id);
   }
   int update(int id) {
     grid_t& grid = grids[id];
     int gh = grid.size();
     int gw = grid[0].size();
     Pos p = {rnd.nextInt(w-gw+1), rnd.nextInt(h-gh+1)};
+    int diff = update(id, p);
+    return diff;
+  }
+  int update2(int id) { // 他のgridに隣り合う点のみを候補とする
+    grid_t& grid = grids[id];
+    int gh = grid.size();
+    int gw = grid[0].size();
+    int id2 = rnd.nextInt(N-1);
+    if (id2 >= id) ++id2;
+    int type = rnd.nextInt(2);
+    Pos p;
+    p.x = lp[id2].x+type*grids[id2][0].size();
+    p.y = lp[id2].x+(1-type)*grids[id2].size();
+    if (p.x+gw > w || p.y+gh > h) return INVALID;
     int diff = update(id, p);
     return diff;
   }
@@ -223,8 +237,8 @@ struct State {
 
 struct SASolver {
   double startTemp = 30;
-  double endTemp = 0.01;
-  Timer timer = Timer(0.3);
+  double endTemp = 1;
+  Timer timer = Timer(1);
   State best;
   grid_t ogrid;
   vector<Pos> best_lp;
@@ -245,7 +259,7 @@ struct SASolver {
     {
       for (int i = 0; i < 1000; ++i) { // 時間計算を間引く
         int diff = state.update();
-        if (diff == -1001001) { // 絶対に更新しない場合
+        if (diff == INVALID) { // 絶対に更新しない場合
           // state.revert();
           continue;
         }
@@ -287,7 +301,7 @@ struct Answer {
 };
 
 struct Solver {
-  Timer timer = Timer(9.8);
+  Timer timer = Timer(9.0);
   grid_t ogrid;
   vector<Answer> answers;
   vector<Pos> lp;
@@ -316,14 +330,12 @@ struct Solver {
     }
   }
 
-  void solve_greedy(int ms=0, bool vertical=false) {
+  void solve_greedy(int mh=0, int mw=0, bool vertical=false) {
     vector<int> gids;
     for (int i = 0; i < N; ++i) {
       gids.push_back(i);
     }
-    int mh, mw = 0;
     if (vertical) {
-      mw = ms;
       sort(gids.begin(), gids.end(), [&](int l, int r) {
         int lh = grids[l].size();
         int lw = grids[l][0].size();
@@ -334,7 +346,6 @@ struct Solver {
       });
     }
     else {
-      mh = ms;
       sort(gids.begin(), gids.end(), [&](int l, int r) {
         int lh = grids[l].size();
         int lw = grids[l][0].size();
@@ -428,8 +439,8 @@ struct Solver {
     // }
   }
 
-  double solve_sa(int h, int w, double limit = 0.3) {
-    State s(h, w);
+  double solve_sa(int h, int w, double limit, int utype=0) {
+    State s(h, w, utype);
     for (int i = 0; i < N; ++i) {
       int diff = s.update(i);
       // cerr << s1 << " " << diff << " " << s2 << endl;
@@ -449,9 +460,11 @@ struct Solver {
     return ans.score;
   }
   void solve() {
-    for (int s = 0; s <= 50; ++s) {
-      solve_greedy(s);
-      solve_greedy(s,true);
+    for (int s = 0; s <= 40; ++s) {
+      solve_greedy(s,0);
+      solve_greedy(0,s,true);
+      solve_greedy(s,20);
+      solve_greedy(20,s,true);
     }
     int h = 0;
     int w = 0;
@@ -470,21 +483,21 @@ struct Solver {
     int bh = h, bw = w;
     if (s_comp < s_loss) {
       int bh = h, bw = w;
-      // for (int oh =0; oh < 5; ++oh) {
-      //   for (int ow =0; ow < 5; ++ow) {
-      //     double sc = solve_sa(h+oh, w+ow, 3);
-      //     if (sc < best) {
-      //       best = sc;
-      //       bh = h+oh;
-      //       bw = w+ow;
-      //     }
-      //   }
-      // }
+      for (int o =0; o < 3; ++o) {
+        double sc = solve_sa(h+o*10, w+o*10, 1.0);
+        if (sc < best) {
+          best = sc;
+          bh = h+o;
+          bw = w+o;
+        }
+      }
       solve_sa(bh, bw, timer.LIMIT-timer.get());
     }
     else {
-      int sz = sqrt(sum*1.02);
-      solve_sa(max(sz,h), max(sz,w), timer.LIMIT-timer.get());
+      int sh = sqrt(sum);
+      int sw = sum*1.03/sh;
+      // cerr << sum << " " << 1.0*(sh*sw)/sum << " " << sh << " " << sw << " " << h << " " << w << endl;
+      solve_sa(max(sh,h), max(sw,w), timer.LIMIT-timer.get(), 1);
     }
   }
 
