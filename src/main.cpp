@@ -167,6 +167,13 @@ struct State {
   State() : bloss(0), loss(0), h(10), w(10), lp(N, {-1, -1}), update_type(0) {}
   State(int h, int w) : bloss(0), loss(0), h(h), w(w), lp(N, {-1, -1}), update_type(0) {}
   State(int h, int w, int u) : bloss(0), loss(0), h(h), w(w), lp(N, {-1, -1}), update_type(u) {}
+  void init() {
+    for (int y = 0; y < h; ++y) {
+      for (int x = 0; x < w; ++x) {
+        memo[y][x] = MedianSet2();
+      }
+    }
+  }
   int update() {
     int id = rnd.nextInt(N);
     // if (update_type > 0) { 
@@ -441,6 +448,7 @@ struct Solver {
 
   double solve_sa(int h, int w, double limit, int utype=0) {
     State s(h, w, utype);
+    s.init();
     for (int i = 0; i < N; ++i) {
       int diff = s.update(i);
       // cerr << s1 << " " << diff << " " << s2 << endl;
@@ -481,16 +489,25 @@ struct Solver {
     logger::json("s_comp",s_comp,"s_loss",s_loss,"T",T,"P",P);
     double best = 100;
     int bh = h, bw = w;
+    vector<Pos> cand = {{0,0},{0,1},{0,2},{1,0},{1,1},{1,2},{2,0},{2,1},{2,2},{5,5},{10,10}};
     if (s_comp < s_loss) {
       int bh = h, bw = w;
-      for (int o =0; o < 3; ++o) {
-        double sc = solve_sa(h+o*10, w+o*10, 1.0);
+      for (Pos p : cand) {
+        double sc = solve_sa(h+p.y, w+p.x, 0.25);
         if (sc < best) {
           best = sc;
-          bh = h+o;
-          bw = w+o;
+          bh = h+p.y;
+          bw = w+p.x;
         }
       }
+      // for (int o = 0; o < 3; ++o) {
+      //   double sc = solve_sa(h+o*10, w+o*10, 1.0);
+      //   if (sc < best) {
+      //     best = sc;
+      //     bh = h+o;
+      //     bw = w+o;
+      //   }
+      // }
       solve_sa(bh, bw, timer.LIMIT-timer.get());
     }
     else {
@@ -499,6 +516,30 @@ struct Solver {
       // cerr << sum << " " << 1.0*(sh*sw)/sum << " " << sh << " " << sw << " " << h << " " << w << endl;
       solve_sa(max(sh,h), max(sw,w), timer.LIMIT-timer.get(), 1);
     }
+    // postprocess(answers[answers.size()-1]);
+  }
+
+  void postprocess(State &s) {
+    for (int i = 0; i < N; ++i) {
+      grid_t &grid = grids[i];
+      int h = grid.size();
+      int w = grid[0].size();
+      if (h*w > 10) continue;
+      double best = s.calcScore();
+      Pos bp = s.lp[i];
+      for (int y = 0; y < s.h-h; ++y) {
+        for (int x = 0; x < s.w-w; ++x) {
+          s.update(i, {x,y});
+          double score = s.calcScore();
+          if (score < best) {
+            best = score;
+            bp = {x,y};
+          }
+        }
+      }
+      s.update(i, bp);
+    }
+
   }
 
   void write() {
