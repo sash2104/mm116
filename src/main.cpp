@@ -176,10 +176,6 @@ struct State {
   }
   int update() {
     int id = rnd.nextInt(N);
-    // if (update_type > 0) { 
-    //   int type = rnd.nextInt(10);
-    //   if (type < 2) return update(id);
-    // }
     return update(id);
   }
   int update(int id) {
@@ -308,7 +304,8 @@ struct Answer {
 };
 
 struct Solver {
-  Timer timer = Timer(9.0);
+  double best_score = 100;
+  Timer timer = Timer(9.8);
   grid_t ogrid;
   vector<Answer> answers;
   vector<Pos> lp;
@@ -337,22 +334,38 @@ struct Solver {
     }
   }
 
-  void solve_greedy(int mh=0, int mw=0, bool vertical=false) {
+  int calc_dead_space(const Pos& from, const Pos& to,
+    vector<vector<bool>>& placed, vector<vector<bool>>& dead, bool update=false) {
+    int ret = 0;
+    // if (from.x == 10 && from.y == 20) {
+    //   for (int y = 0; y < 30; ++y) {
+    //     for (int x = 0; x < 30; ++x) {
+    //       cerr << placed[y][x];
+    //     }
+    //     cerr << endl;
+    //   }
+    // }
+    for (int y = from.y; y <= to.y; ++y) {
+      if (y < 0) continue;
+      if (from.x == 0) continue;
+      if (placed[y][from.x-1]) continue;
+      if (dead[y][from.x-1]) continue;
+      // if (from.x == 10 && from.y == 20) cerr << from.x << " " << y << " " << placed[y][from.x-2] << endl;
+      if (from.x-2>=0 && !placed[y][from.x-2]) continue;
+      // assert(false);
+      ++ret;
+      if (update) dead[y][from.x] = true;
+    }
+
+    return ret;
+  }
+
+  void solve_greedy(int mh=0, int mw=0, int type=0) {
     vector<int> gids;
     for (int i = 0; i < N; ++i) {
       gids.push_back(i);
     }
-    if (vertical) {
-      sort(gids.begin(), gids.end(), [&](int l, int r) {
-        int lh = grids[l].size();
-        int lw = grids[l][0].size();
-        int rh = grids[r].size();
-        int rw = grids[r][0].size();
-        if (lw == rw) return lh > rh;
-        return lw > rw;
-      });
-    }
-    else {
+    if (type == 0) {
       sort(gids.begin(), gids.end(), [&](int l, int r) {
         int lh = grids[l].size();
         int lw = grids[l][0].size();
@@ -362,10 +375,31 @@ struct Solver {
         return lh > rh;
       });
     }
+    else if (type == 1) {
+      sort(gids.begin(), gids.end(), [&](int l, int r) {
+        int lh = grids[l].size();
+        int lw = grids[l][0].size();
+        int rh = grids[r].size();
+        int rw = grids[r][0].size();
+        if (lw == rw) return lh > rh;
+        return lw > rw;
+      });
+    }
+    else if (type == 2) {
+      sort(gids.begin(), gids.end(), [&](int l, int r) {
+        int lh = grids[l].size();
+        int lw = grids[l][0].size();
+        int rh = grids[r].size();
+        int rw = grids[r][0].size();
+        if (lh*lw==rh*rw) return lh > rh;
+        return lh*lw>rh*rw;
+      });
+    }
     vector<Pos> put; // おいた場所
     vector<Pos> cand;
     int ma = 500;
     vector<vector<bool>> placed(ma, vector<bool>(ma));
+    vector<vector<bool>> dead(ma, vector<bool>(ma)); // もう置けない場所
     cand.push_back({0, 0});
     for (int id : gids) {
       int h = grids[id].size();
@@ -383,12 +417,43 @@ struct Solver {
         if (cnt*10 > h*w) continue;
         int h2 = max(mh, (p.y+h));
         int w2 = max(mw, (p.x+w));
-        int score = h2*w2+abs(h2-w2);
+        // int score = h2*w2+abs(h2-w2);
+        // int ds = calc_dead_space(p,{p.x+w-1,p.y+h-1},placed,dead);
+        // int score = h2*w2+abs(h2-w2)+abs(p.y-p.x)+cnt+ds;
+        int score = h2*w2+abs(h2-w2)+abs(p.y-p.x)+cnt;
         if (score < best) {
           bp = p;
           best = score;
         }
       }
+      // 空きがあったらずらす
+      {
+        bool movable = bp.y > 0;
+        while (movable) {
+          if (bp.y > 0) {
+            for (int x = bp.x; x < bp.x+w; ++x) {
+              if (placed[bp.y-1][x]) { movable = false; break;}
+            }
+          }
+          if (movable) --bp.y;
+          else break;
+          movable = bp.y > 0;
+        }
+      }
+      {
+        bool movable = bp.x > 0;
+        while (movable) {
+          if (bp.x > 0) {
+            for (int y = bp.y; y < bp.y+h; ++y) {
+              if (placed[y][bp.x-1]) { movable = false; break;}
+            }
+          }
+          if (movable) --bp.x;
+          else break;
+          movable = bp.x > 0;
+        }
+      }
+
       put.push_back(bp);
       mh = max(mh, bp.y+h);
       mw = max(mw, bp.x+w);
@@ -426,7 +491,8 @@ struct Solver {
     ans.loss = 0;
     ans.comp = ans.h*ans.w / (double)T;
     ans.score = ans.comp*P+ans.loss*(1-P);
-    if (answers.size() > 0 && answers[0].score <= ans.score) return;
+    if (best_score <= ans.score) return;
+    best_score = min(best_score, ans.score);
     answers.push_back(ans);
     logger::json("type","greedy_loss","c",ans.comp,"l",ans.loss,"score",ans.score, "h",ans.h,"w",ans.w);
     // cerr << ans.comp << " " << ans.loss << " " << ans.score << endl;
@@ -468,11 +534,9 @@ struct Solver {
     return ans.score;
   }
   void solve() {
-    for (int s = 0; s <= 40; ++s) {
+    for (int s = 0; s < 20; ++s) {
       solve_greedy(s,0);
-      solve_greedy(0,s,true);
-      solve_greedy(s,20);
-      solve_greedy(20,s,true);
+      solve_greedy(0,s,1);
     }
     int h = 0;
     int w = 0;
@@ -489,7 +553,11 @@ struct Solver {
     logger::json("s_comp",s_comp,"s_loss",s_loss,"T",T,"P",P);
     double best = 100;
     int bh = h, bw = w;
-    vector<Pos> cand = {{0,0},{0,1},{0,2},{1,0},{1,1},{1,2},{2,0},{2,1},{2,2},{5,5},{10,10}};
+    vector<Pos> cand = {{0,0},{0,1},{1,0},{1,1},{2,0},{2,2},{5,5},{10,10},{15,15},{20,20}};
+    // vector<Pos> cand;
+    // for (int i = 0; i < 30; ++i) {
+    //   cand.push_back((Pos){i,i});
+    // }
     if (s_comp < s_loss) {
       int bh = h, bw = w;
       for (Pos p : cand) {
@@ -500,17 +568,16 @@ struct Solver {
           bw = w+p.x;
         }
       }
-      // for (int o = 0; o < 3; ++o) {
-      //   double sc = solve_sa(h+o*10, w+o*10, 1.0);
-      //   if (sc < best) {
-      //     best = sc;
-      //     bh = h+o;
-      //     bw = w+o;
-      //   }
-      // }
       solve_sa(bh, bw, timer.LIMIT-timer.get());
     }
     else {
+      for (int s = 0; s <= 60; ++s) {
+        for (int s2 = 0; s2 <= 60; ++s2) {
+        solve_greedy(s,s2);
+        solve_greedy(s2,s,1);
+        }
+        if (timer.LIMIT-timer.get() < 0) break;
+      }
       int sh = sqrt(sum);
       int sw = sum*1.03/sh;
       // cerr << sum << " " << 1.0*(sh*sw)/sum << " " << sh << " " << sw << " " << h << " " << w << endl;
