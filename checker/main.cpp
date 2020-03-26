@@ -62,8 +62,8 @@ int main(int argc, char* argv[])
 		int W = mout[0].size();
 		int loss = 0;
 		for (int i = 0; i < N; ++i) {
-			int x = ouf.readInt();
 			int y = ouf.readInt();
+			int x = ouf.readInt();
 			ouf.readEoln();
 			vector<vector<int>> &grid = in[i];
 			for (int j = 0; j < grid.size(); ++j) {

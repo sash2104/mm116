@@ -19,6 +19,7 @@ fi
 result=$3/result.txt
 echo -n > $result
 
+# for i in $(seq 1 10)
 for i in $(seq 1 10)
 do
   file=$indir/$i.in

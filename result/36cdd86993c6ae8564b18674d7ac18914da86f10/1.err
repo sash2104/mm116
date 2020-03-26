@@ -1,0 +1,9 @@
+{"tag":"param","type":"sa","start_temp":"30","end_temp":"1","limit":"5"}
+{"tag":"!","time":"6.79707e-05","counter":"0","score":"-754"}
+{"tag":"!","time":"6.79707e-05","counter":"6","score":"-743"}
+{"tag":"!","time":"6.79707e-05","counter":"7","score":"-737"}
+{"tag":"!","time":"6.79707e-05","counter":"8","score":"-558"}
+{"tag":"!","time":"6.79707e-05","counter":"376","score":"-551"}
+{"tag":"!","time":"6.79707e-05","counter":"494","score":"-541"}
+{"tag":"!","time":"0.00953273","counter":"3022","score":"-527"}
+{"tag":"result","counter":"1824000","score":"-527"}
